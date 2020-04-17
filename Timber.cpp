@@ -2,10 +2,18 @@
 #include <iostream>
 #include <sstream>
 #include <SFML/graphics.hpp>
-
+#include <SFML/Audio.hpp>
 // easier to type code
 using namespace sf;
 
+// Declare the function
+void updateBranches(int seed);
+const int NUM_BRANCHES = 6;
+Sprite branches[NUM_BRANCHES];
+
+// Where is the player
+enum class side { LEFT,RIGHT,NONE };
+side branchPositions[NUM_BRANCHES];
 
 int main()
 {
@@ -121,6 +129,75 @@ int main()
     messageText.setPosition(1920 / 2.0f, 1080 / 2.0f);
     scoreText.setPosition(20, 20);
 
+    // Prepare the 6 branches
+    Texture textureBranch;
+    textureBranch.loadFromFile("graphics/branch.png");
+
+    // Set the branch texture
+    for (int i = 0; i < NUM_BRANCHES; i++)
+    {
+        branches[i].setTexture(textureBranch);
+        branches[i].setPosition(-2000, -2000);
+        // Set the origin to center
+        branches[i].setOrigin(220, 20);
+    }
+    // prepare the player
+    Texture texturePlayer;
+    texturePlayer.loadFromFile("graphics/player.png");
+    Sprite spritePlayer;
+    spritePlayer.setTexture(texturePlayer);
+    spritePlayer.setPosition(580, 720);
+
+    //Player starts on the right
+    side playerSide = side::RIGHT;
+
+    // Gravestone
+    Texture textureGravestone;
+    textureGravestone.loadFromFile("graphics/RIP.png");
+    Sprite spriteRIP;
+    spriteRIP.setTexture(textureGravestone);
+    spriteRIP.setPosition(600, 860);
+
+    //Axe
+    Texture textureAxe;
+    textureAxe.loadFromFile("graphics/axe.png");
+    Sprite spriteAxe;
+    spriteAxe.setTexture(textureAxe);
+    spriteAxe.setPosition(700, 830);
+
+    //Line up axe and tree
+    const float AXE_POSITION_LEFT = 700;
+    const float AXE_POSITION_RIGHT = 1075;
+
+    //Log
+    Texture textureLog;
+    textureLog.loadFromFile("graphics/log.png");
+    Sprite spriteLog;
+    spriteLog.setTexture(textureLog);
+    spriteLog.setPosition(810, 720);
+
+    //Other log variables
+    bool logActive = false;
+    float logSpeedX = 1000;
+    float logSpeedY = -1500;
+
+    bool acceptInput(false);
+
+    SoundBuffer chopBuffer;
+    chopBuffer.loadFromFile("sound/chop.wav");
+    Sound chop;
+    chop.setBuffer(chopBuffer);
+
+    SoundBuffer deathBuffer;
+    deathBuffer.loadFromFile("sound/death.wav");
+    Sound death;
+    death.setBuffer(deathBuffer);
+
+    SoundBuffer ootBuffer;
+    ootBuffer.loadFromFile("sound/out_of_time.wav");
+    Sound oot;
+    oot.setBuffer(ootBuffer);
+
     // The game loop
     while (window.isOpen())
     {   
@@ -129,6 +206,17 @@ int main()
         Player input handling
         *************************
         */
+        Event event;
+        while (window.pollEvent(event))
+        {
+            if (event.type == Event::KeyReleased && !paused)
+            {
+                acceptInput = true;
+
+                spriteAxe.setPosition(2000,
+                    spriteAxe.getPosition().y);
+            }
+        }
 
         if (Keyboard::isKeyPressed(Keyboard::Escape))
         {
@@ -143,7 +231,81 @@ int main()
             //reset the time and score
             score = 0;
             timeRemaining = 6;
+
+            //make all the branches disappear
+            for (int i = 0; i < NUM_BRANCHES; i++)
+            {
+                branchPositions[i] = side::NONE;
+            }
+            spriteRIP.setPosition(675, 2000);
+            spritePlayer.setPosition(580, 720);
+            acceptInput = true;
         }
+
+        if (acceptInput)
+        {
+            if (Keyboard::isKeyPressed(Keyboard::Right))
+            {
+                // Set the player to the right
+                playerSide = side::RIGHT;
+
+                // Increase the score
+                score++;
+
+                // Add time that gets smaller with better scores
+                timeRemaining += (2 / score) + .15;
+
+                // Move the axe with the sprite
+                spriteAxe.setPosition(AXE_POSITION_RIGHT, spriteAxe.getPosition().y);
+
+                // Move the player sprite
+                spritePlayer.setPosition(1200, 720);
+
+                //update the branches
+                updateBranches(score);
+
+                // Send the log flying
+                spriteLog.setPosition(810, 720);
+                logSpeedX = -5000;
+                logActive = true;
+
+                // Only accept input once
+                acceptInput = false;
+                chop.play();
+            }
+            else if (Keyboard::isKeyPressed(Keyboard::Left))
+            {
+                // Set the player to the left
+                playerSide = side::LEFT;
+
+                // Increase the score
+                score++;
+
+                // Add time that gets smaller with better scores
+                timeRemaining += (2 / score) + .15;
+
+                // Move the axe with the sprite
+                spriteAxe.setPosition(AXE_POSITION_LEFT, spriteAxe.getPosition().y);
+
+                // Move the player sprite
+                spritePlayer.setPosition(580, 720);
+
+                //update the branches
+                updateBranches(score);
+
+                // Send the log flying
+                spriteLog.setPosition(810, 720);
+                logSpeedX = 5000;
+                logActive = true;
+
+                // Only accept input once
+                acceptInput = false;
+
+                //play sound effect
+                chop.play();
+            }
+        }
+       
         /*
         *************************
         Update the scene
@@ -152,7 +314,40 @@ int main()
 
         // Measure time
         Time dt = clock.restart();
+        if (logActive)
+        {
+            spriteLog.setPosition(
+                spriteLog.getPosition().x +
+                (logSpeedX * dt.asSeconds()),
+                spriteLog.getPosition().y +
+                (logSpeedY * dt.asSeconds()));
+            if (spriteLog.getPosition().x < -100 ||
+                spriteLog.getPosition().x > 2000)
+            {
+                logActive = false;
+                spriteLog.setPosition(810, 720);
+            }
+        }
+        if (branchPositions[5] == playerSide)
+        {
+            paused = true;
+            acceptInput = false;
 
+            spriteRIP.setPosition(525, 760);
+            spritePlayer.setPosition(2000, 660);
+            playerSide = side::NONE;
+
+            messageText.setString("Squished!");
+
+            FloatRect textRect = messageText.getLocalBounds();
+            messageText.setOrigin(textRect.left +
+                textRect.width / 2.0f,
+                textRect.top +
+                textRect.height / 2.0f);
+            messageText.setPosition(1920 / 2.0f, 1080 / 2.0f);
+            death.play();
+            playerSide = side::RIGHT;
+        }
 
         if (!paused)
         {
@@ -173,6 +368,7 @@ int main()
                     textRect.top +
                     textRect.height / 2.0f);
                 messageText.setPosition(1920 / 2.0f, 1080 / 2.0f);
+                oot.play();
             }
             //Bee setup
             if (!beeActive)
@@ -210,7 +406,7 @@ int main()
 
                 // How high is the cloud
                 srand((int)time(0) * 10);
-                float height = (rand() % 100);
+                float height = (rand() % 100) + 100;
                 spriteCloud1.setPosition(-200, height);
                 cloud1Active = true;
             }
@@ -235,7 +431,7 @@ int main()
                 cloud2Speed = (rand() % 200);
 
                 // How high is the cloud
-                srand((int)time(0) * 10);
+                srand((int)time(0) * 15);
                 float height = (rand() % 300);
                 spriteCloud2.setPosition(-200, height);
                 cloud2Active = true;
@@ -261,7 +457,7 @@ int main()
                 cloud3Speed = (rand() % 300);
 
                 // How high is the cloud
-                srand((int)time(0) * 10);
+                srand((int)time(0) * 20);
                 float height = (rand() % 300);
                 spriteCloud3.setPosition(-200, height);
                 cloud3Active = true;
@@ -284,6 +480,33 @@ int main()
             std::stringstream ss;
             ss << "Score = " << score;
             scoreText.setString(ss.str());
+
+            // Update the branch sprites
+            for (int i = 0; i < NUM_BRANCHES; i++)
+            {
+                float height = i * 150;
+                if (branchPositions[i] == side::LEFT)
+                {
+                    // Move sprites left
+                    branches[i].setPosition(610, height);
+                    // Make them face the correct way
+                    branches[i].setRotation(180);
+                }
+                else if (branchPositions[i] == side::RIGHT)
+                {
+                    // move sprite to the right
+                    branches[i].setPosition(1330, height);
+
+                    // Make it face the correct way
+                    branches[i].setRotation(0);
+                }
+                else
+                {
+                    //hide the branch
+                    branches[i].setPosition(3000, height);
+                }
+            }
+            
         }
             /*
             *************************
@@ -304,6 +527,24 @@ int main()
             //Draw tree
             window.draw(spriteTree);
 
+            // Draw the branches
+            for (int i = 0; i < NUM_BRANCHES; i++)
+            {
+                window.draw(branches[i]);
+            }
+            
+            //Draw the player
+            window.draw(spritePlayer);
+
+            //Draw the axe
+            window.draw(spriteAxe);
+
+            //Draw the log
+            window.draw(spriteLog);
+
+            //Draw the gravestone
+            window.draw(spriteRIP);
+
             // Draw Bee
             window.draw(spriteBee);
 
@@ -320,4 +561,28 @@ int main()
 
     }
     return 0;
+}
+
+void updateBranches(int seed)
+{
+    // move the branches move down 1 position at a time
+    for (int j = NUM_BRANCHES - 1;j > 0; j--)
+    {
+        branchPositions[j] = branchPositions[j - 1];
+    }
+    // Spawn a new branch at position 0
+    srand((int)time(0) + seed);
+    int r = (rand() % 5);
+    switch (r)
+    {
+    case 0:
+        branchPositions[0] = side::LEFT;
+        break;
+    case 1:
+        branchPositions[1] = side::RIGHT;
+        break;
+    default:
+        branchPositions[0] = side::NONE;
+        break;
+    }
 }
